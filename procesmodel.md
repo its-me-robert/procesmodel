@@ -43,7 +43,7 @@ Dit model is bedoeld als herbruikbaar fundament voor het opzetten van nieuwe uit
    Procesvarianten worden geconfigureerd met fase- en taakdefinities.
 
 2. **Eenduidige hiërarchie**  
-   Elke Hoofdzaak bestaat uit Subzaken; elke Subzaak bestaat uit SubZaakTaken.
+   Elke Hoofdzaak bestaat uit Subzaken; elke Subzaak bestaat uit SubZaakTaak-items.
 
 3. **Centrale orkestratie**  
    Een Procesmanagement-service bepaalt startvoorwaarden, volgorde en statusafleiding.
@@ -73,7 +73,7 @@ flowchart TD
 
         subgraph SZ1["Subzaak: Intake"]
             SZ_INTAKE[Input verzamelen] --> TAAK_INTAKE_1
-            subgraph SZT1["SubZaakTaken Intake"]
+            subgraph SZT1["SubZaakTaak Intake"]
                 TAAK_INTAKE_1[Ontvangst registreren] --> TAAK_INTAKE_2[Invoer structureren]
             end
             TAAK_INTAKE_2 --> SZ1_DONE[/Subzaak Intake afgerond/]
@@ -83,7 +83,7 @@ flowchart TD
 
         subgraph SZ2["Subzaak: Validatie"]
             SZ_VALIDATIE[Validatie starten] --> TAAK_VAL_1
-            subgraph SZT2["SubZaakTaken Validatie"]
+            subgraph SZT2["SubZaakTaak Validatie"]
                 TAAK_VAL_1[Gegevenscontrole] --> TAAK_VAL_2[Regelcontrole]
             end
             TAAK_VAL_2 --> SZ2_DONE[/Subzaak Validatie afgerond/]
@@ -95,7 +95,7 @@ flowchart TD
 
         subgraph SZ3["Subzaak: Aanvulling"]
             SZ_AANVULLING[Aanvulling opvragen] --> TAAK_AANV_1
-            subgraph SZT3["SubZaakTaken Aanvulling"]
+            subgraph SZT3["SubZaakTaak Aanvulling"]
                 TAAK_AANV_1[Aanvulling ontvangen] --> TAAK_AANV_2[Aanvulling verwerken]
             end
             TAAK_AANV_2 --> SZ3_DONE[/Subzaak Aanvulling afgerond/]
@@ -105,7 +105,7 @@ flowchart TD
 
         subgraph SZ4["Subzaak: Uitvoering"]
             SZ_UITVOERING[Uitvoering starten] --> TAAK_UIT_1
-            subgraph SZT4["SubZaakTaken Uitvoering"]
+            subgraph SZT4["SubZaakTaak Uitvoering"]
                 TAAK_UIT_1[Beslismoment uitvoeren] --> TAAK_UIT_2[Resultaat voorbereiden]
             end
             TAAK_UIT_2 --> SZ4_DONE[/Subzaak Uitvoering afgerond/]
@@ -115,7 +115,7 @@ flowchart TD
 
         subgraph SZ5["Subzaak: Controle"]
             SZ_CONTROLE[Controle starten] --> TAAK_CON_1
-            subgraph SZT5["SubZaakTaken Controle"]
+            subgraph SZT5["SubZaakTaak Controle"]
                 TAAK_CON_1[Kwaliteitscontrole] --> TAAK_CON_2[Output valideren]
             end
             TAAK_CON_2 --> SZ5_DONE[/Subzaak Controle afgerond/]
@@ -125,7 +125,7 @@ flowchart TD
 
         subgraph SZ6["Subzaak: Afsluiting"]
             SZ_AFSLUITING[Afsluiten starten] --> TAAK_AFS_1
-            subgraph SZT6["SubZaakTaken Afsluiting"]
+            subgraph SZT6["SubZaakTaak Afsluiting"]
                 TAAK_AFS_1[Uitkomst publiceren] --> TAAK_AFS_2[Historie finaliseren]
             end
             TAAK_AFS_2 --> SZ6_DONE[/Subzaak Afsluiting afgerond/]
@@ -429,7 +429,7 @@ Nieuwe regelingen worden toegevoegd met een vaste implementatiestrategie:
 
 1. Definieer een nieuw **zaaktype** met configuratie.
 2. Selecteer en orden standaard **Subzaken**.
-3. Koppel per Subzaak de benodigde **SubZaakTaken**.
+3. Koppel per Subzaak de benodigde **SubZaakTaak-items**.
 4. Configureer statusmapping extern/intern.
 5. Koppel optionele externe integraties via gestandaardiseerde connectoren.
 
@@ -478,8 +478,8 @@ De validatie toont geen blokkerende hiaten voor generieke inzet. Een extra itera
 | **Subzaak** | Fase binnen de Hoofdzaak met eigen lifecycle |
 | **SubZaakTaak** | Kleinste uitvoerbare taak binnen een Subzaak |
 | **Procesmanagement-service** | Component voor orkestratie, statusafleiding en historie |
-| **Procesengine** | Component die SubZaakTaken uitvoert conform configuratie |
+| **Procesengine** | Component die SubZaakTaak-items uitvoert conform configuratie |
 | **Zaakregister** | Persistente opslag voor Hoofdzaak, Subzaak, SubZaakTaak en historie |
-| **Documentopslag** | Opslag van documentreferenties gekoppeld aan SubZaakTaken |
+| **Documentopslag** | Opslag van documentreferenties gekoppeld aan SubZaakTaak-items |
 | **Externe status** | Vereenvoudigde status voor externe consumptie |
 | **Interne status** | Gedetailleerde status voor operationele sturing |
