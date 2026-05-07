@@ -351,7 +351,7 @@ erDiagram
         datetime GEWIJZIGD_OP
     }
 
-    SUB_ZAAK_TAAK {
+    SUBZAAKTAAK {
         string ID PK
         string SUBZAAK_ID FK
         string CODE
@@ -377,25 +377,25 @@ erDiagram
     DOCUMENT {
         string ID PK
         string REFERENTIE
-        string SUB_ZAAK_TAAK_ID FK
+        string SUBZAAKTAAK_ID FK
         string TYPE
         datetime AANGEMAAKT_OP
     }
 
     HOOFDZAAK ||--o{ SUBZAAK : bevat
     HOOFDZAAK ||--o{ HOOFDZAAK_PARAMETER : heeft
-    SUBZAAK ||--o{ SUB_ZAAK_TAAK : bevat
-    SUB_ZAAK_TAAK ||--o{ DOCUMENT : verwijst
+    SUBZAAK ||--o{ SUBZAAKTAAK : bevat
+    SUBZAAKTAAK ||--o{ DOCUMENT : verwijst
     HOOFDZAAK ||--o{ STATUS_OVERGANG : logt
     SUBZAAK ||--o{ STATUS_OVERGANG : logt
-    SUB_ZAAK_TAAK ||--o{ STATUS_OVERGANG : logt
+    SUBZAAKTAAK ||--o{ STATUS_OVERGANG : logt
 ```
 
 ### Datamodel-richtlijnen
 
 - Alle entiteiten hebben technische ID, tijdstempels en herkomstvelden.
 - Statussen worden centraal beheerd en historisch gelogd.
-- `STATUS_OVERGANG` gebruikt een polymorfe verwijzing: `ENTITEIT_TYPE` bepaalt of `ENTITEIT_ID` verwijst naar `HOOFDZAAK`, `SUBZAAK` of `SUB_ZAAK_TAAK`.
+- `STATUS_OVERGANG` gebruikt een polymorfe verwijzing: `ENTITEIT_TYPE` bepaalt of `ENTITEIT_ID` verwijst naar `HOOFDZAAK`, `SUBZAAK` of `SUBZAAKTAAK`.
 - Extensies worden toegevoegd via parameters of aanvullende tabellen, niet door kernentiteiten te vervuilen.
 
 ---
