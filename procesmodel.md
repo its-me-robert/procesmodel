@@ -1,637 +1,485 @@
-# Procesmodel RVO – UPNL Zaakmanagement
+# Generiek Procesmodel RVO – Zaakmanagement op nieuw platform
 
-> Gebaseerd op de RVO-documentatie: *Procesmanagement* en *Zaakmanagement* (datamodel).
-> Alle diagrammen zijn gemaakt met Mermaid. Naamgeving volgt de UPNL/RVO-terminologie consistent.
+> Dit document beschrijft een generiek, regeling-onafhankelijk procesmodel voor zaakmanagement.
+> Alle diagrammen zijn in Mermaid en gebruiken gestandaardiseerde termen.
 
 ---
 
 ## Inhoudsopgave
 
-1. [Overzicht: RVO Zaakproces (end-to-end)](#1-overzicht-rvo-zaakproces-end-to-end)
-2. [Hoofdzaak · Subzaak · Subsubzaak – hiërarchie](#2-hoofdzaak--subzaak--subsubzaak-hiërarchie)
-3. [Zaakstatus – toestandsdiagram](#3-zaakstatus--toestandsdiagram)
-4. [Fasebeheer – sequentiediagram](#4-fasebeheer--sequentiediagram)
-5. [Architectuur – componentdiagram](#5-architectuur--componentdiagram)
-6. [Databasismodel – entiteiten](#6-databasismodel--entiteiten)
+1. [Doel en afbakening](#1-doel-en-afbakening)
+2. [Kernprincipes](#2-kernprincipes)
+3. [Generieke end-to-end lifecycle](#3-generieke-end-to-end-lifecycle)
+4. [Hiërarchie: Hoofdzaak · Subzaak · SubZaakTaak](#4-hiërarchie-hoofdzaak--subzaak--subzaaktaak)
+5. [Statusmodel](#5-statusmodel)
+6. [Fase-orkestratie (sequentie)](#6-fase-orkestratie-sequentie)
+7. [Architectuur (componenten)](#7-architectuur-componenten)
+8. [Generiek datamodel](#8-generiek-datamodel)
+9. [Governance en ontwerpafspraken](#9-governance-en-ontwerpafspraken)
+10. [Uitbreidbaarheid voor nieuwe regelingen](#10-uitbreidbaarheid-voor-nieuwe-regelingen)
+11. [Lead-architect validatie](#11-lead-architect-validatie)
+12. [Naamgevingsconventies](#12-naamgevingsconventies)
 
 ---
 
-## 1. Overzicht: RVO Zaakproces (end-to-end)
+## 1. Doel en afbakening
 
-Het volgende diagram toont de volledige levenscyclus van een RVO-zaak, van aanvraag tot en met eventuele bezwaar-/beroepsprocedure. Elke **Hoofdzaak** doorloopt één of meerdere **Subzaken** (fases). Iedere Subzaak bestaat uit één of meerdere **Subsubzaken** (taken).
+Dit model is bedoeld als herbruikbaar fundament voor het opzetten van nieuwe uitvoeringsprocessen op een nieuw RVO-platform.
+
+**Afbakening:**
+- Geen regeling-specifieke processtappen.
+- Geen juridisch-specifieke stromen of terminologie.
+- Geen productspecifieke of domeinspecifieke uitzonderingen.
+
+**Doel:**
+- Eén uniforme structuur voor processturing, statusafleiding en historie.
+- Snelle onboarding van nieuwe regelingen via configuratie in plaats van maatwerk.
+
+---
+
+## 2. Kernprincipes
+
+1. **Configuratie boven codering**  
+   Procesvarianten worden geconfigureerd met fase- en taakdefinities.
+
+2. **Eenduidige hiërarchie**  
+   Elke Hoofdzaak bestaat uit Subzaken; elke Subzaak bestaat uit SubZaakTaken.
+
+3. **Centrale orkestratie**  
+   Een Procesmanagement-service bepaalt startvoorwaarden, volgorde en statusafleiding.
+
+4. **Volledige auditability**  
+   Elke statuswijziging en taakuitkomst is historisch herleidbaar.
+
+5. **Idempotente verwerking**  
+   Herhaalde events veroorzaken geen dubbele of inconsistente mutaties.
+
+6. **Scheiding van verantwoordelijkheden**  
+   UI, processturing, gegevensopslag en documentopslag zijn losgekoppeld.
+
+---
+
+## 3. Generieke end-to-end lifecycle
+
+Onderstaand proces toont een neutrale lifecycle zonder regeling- of juridisch-specifieke paden.
 
 ```mermaid
 flowchart TD
-    START([Aanvraag ingediend]) --> HZ_AANMAKEN
+    START([Verzoek ontvangen]) --> HZ_CREATE
 
     subgraph HZ["Hoofdzaak"]
-        HZ_AANMAKEN[Hoofdzaak aanmaken\nin ORM] --> HZ_REG[Zaaknummer toekennen]
-        HZ_REG --> SZ_AANVRAAG
+        HZ_CREATE[Hoofdzaak registreren] --> HZ_INIT[Initiële context vastleggen]
+        HZ_INIT --> SZ_INTAKE
 
-        subgraph SZ1["Subzaak: Aanvraag"]
-            SZ_AANVRAAG[Aanvraag ontvangen] --> TAAK_VOLLEDIGHEID
-            subgraph SSZ1["Subsubzaak: Taken Aanvraag"]
-                TAAK_VOLLEDIGHEID[Volledigheidstoets] --> TAAK_ONTVANGST[Ontvangstbevestiging sturen]
+        subgraph SZ1["Subzaak: Intake"]
+            SZ_INTAKE[Input verzamelen] --> TAAK_INTAKE_1
+            subgraph SZT1["SubZaakTaken Intake"]
+                TAAK_INTAKE_1[Ontvangst registreren] --> TAAK_INTAKE_2[Invoer structureren]
             end
-            TAAK_ONTVANGST --> SZ1_AFGEROND[/Subzaak Aanvraag\nafgerond/]
+            TAAK_INTAKE_2 --> SZ1_DONE[/Subzaak Intake afgerond/]
         end
 
-        SZ1_AFGEROND --> SZ_BEHANDELING
+        SZ1_DONE --> SZ_VALIDATIE
 
-        subgraph SZ2["Subzaak: Behandeling"]
-            SZ_BEHANDELING[Beoordeling starten] --> TAAK_INHOUDELIJK
-            subgraph SSZ2["Subsubzaak: Taken Behandeling"]
-                TAAK_INHOUDELIJK[Inhoudelijke beoordeling] --> TAAK_KWC[Kwaliteitscontrole]
-                TAAK_KWC --> TAAK_CONCEPT[Conceptbeschikking opstellen]
+        subgraph SZ2["Subzaak: Validatie"]
+            SZ_VALIDATIE[Validatie starten] --> TAAK_VAL_1
+            subgraph SZT2["SubZaakTaken Validatie"]
+                TAAK_VAL_1[Gegevenscontrole] --> TAAK_VAL_2[Regelcontrole]
             end
-            TAAK_CONCEPT --> SZ2_AFGEROND[/Subzaak Behandeling\nafgerond/]
+            TAAK_VAL_2 --> SZ2_DONE[/Subzaak Validatie afgerond/]
         end
 
-        SZ2_AFGEROND --> SZ_BESCHIKKING
+        SZ2_DONE --> BESLISSING{Voldoende?}
+        BESLISSING -- Nee --> SZ_AANVULLING
+        BESLISSING -- Ja --> SZ_UITVOERING
 
-        subgraph SZ3["Subzaak: Beschikking"]
-            SZ_BESCHIKKING[Beschikking voorbereiden] --> TAAK_BESCHIKKING
-            subgraph SSZ3["Subsubzaak: Taken Beschikking"]
-                TAAK_BESCHIKKING[Beschikking opstellen] --> TAAK_VERZENDEN[Beschikking verzenden]
+        subgraph SZ3["Subzaak: Aanvulling"]
+            SZ_AANVULLING[Aanvulling opvragen] --> TAAK_AANV_1
+            subgraph SZT3["SubZaakTaken Aanvulling"]
+                TAAK_AANV_1[Aanvulling ontvangen] --> TAAK_AANV_2[Aanvulling verwerken]
             end
-            TAAK_VERZENDEN --> SZ3_AFGEROND[/Subzaak Beschikking\nafgerond/]
+            TAAK_AANV_2 --> SZ3_DONE[/Subzaak Aanvulling afgerond/]
         end
 
-        SZ3_AFGEROND --> BESLISSING{Klant akkoord?}
+        SZ3_DONE --> SZ_VALIDATIE
 
-        BESLISSING -- Ja --> SZ_VASTSTELLING
-        BESLISSING -- Nee --> SZ_BEZWAAR
-
-        subgraph SZ4["Subzaak: Bezwaar"]
-            SZ_BEZWAAR[Bezwaarschrift ontvangen] --> TAAK_BEZWAAR
-            subgraph SSZ4["Subsubzaak: Taken Bezwaar"]
-                TAAK_BEZWAAR[Bezwaar beoordelen] --> TAAK_HOORZITTING[Hoorzitting organiseren]
-                TAAK_HOORZITTING --> TAAK_BEZWAAR_BESLISSING[Beslissing op bezwaar]
+        subgraph SZ4["Subzaak: Uitvoering"]
+            SZ_UITVOERING[Uitvoering starten] --> TAAK_UIT_1
+            subgraph SZT4["SubZaakTaken Uitvoering"]
+                TAAK_UIT_1[Beslismoment uitvoeren] --> TAAK_UIT_2[Resultaat voorbereiden]
             end
-            TAAK_BEZWAAR_BESLISSING --> SZ4_AFGEROND[/Subzaak Bezwaar\nafgerond/]
+            TAAK_UIT_2 --> SZ4_DONE[/Subzaak Uitvoering afgerond/]
         end
 
-        SZ4_AFGEROND --> BESLISSING_BEZWAAR{Bezwaar\ngegrond?}
-        BESLISSING_BEZWAAR -- Nee --> SZ_BEROEP
-        BESLISSING_BEZWAAR -- Ja --> SZ_VASTSTELLING
+        SZ4_DONE --> SZ_CONTROLE
 
-        subgraph SZ5["Subzaak: Beroep"]
-            SZ_BEROEP[Beroepschrift ontvangen] --> TAAK_BEROEP
-            subgraph SSZ5["Subsubzaak: Taken Beroep"]
-                TAAK_BEROEP[Beroep begeleiden] --> TAAK_UITSPRAAK[Rechterlijke uitspraak verwerken]
+        subgraph SZ5["Subzaak: Controle"]
+            SZ_CONTROLE[Controle starten] --> TAAK_CON_1
+            subgraph SZT5["SubZaakTaken Controle"]
+                TAAK_CON_1[Kwaliteitscontrole] --> TAAK_CON_2[Output valideren]
             end
-            TAAK_UITSPRAAK --> SZ5_AFGEROND[/Subzaak Beroep\nafgerond/]
+            TAAK_CON_2 --> SZ5_DONE[/Subzaak Controle afgerond/]
         end
 
-        SZ5_AFGEROND --> SZ_VASTSTELLING
+        SZ5_DONE --> SZ_AFSLUITING
 
-        subgraph SZ6["Subzaak: Vaststelling"]
-            SZ_VASTSTELLING[Vaststellingsverzoek ontvangen] --> TAAK_VASTSTELLING
-            subgraph SSZ6["Subsubzaak: Taken Vaststelling"]
-                TAAK_VASTSTELLING[Vaststelling beoordelen] --> TAAK_VASTST_BESCHIKKING[Vaststellingsbeschikking opstellen]
+        subgraph SZ6["Subzaak: Afsluiting"]
+            SZ_AFSLUITING[Afsluiten starten] --> TAAK_AFS_1
+            subgraph SZT6["SubZaakTaken Afsluiting"]
+                TAAK_AFS_1[Uitkomst publiceren] --> TAAK_AFS_2[Historie finaliseren]
             end
-            TAAK_VASTST_BESCHIKKING --> SZ6_AFGEROND[/Subzaak Vaststelling\nafgerond/]
+            TAAK_AFS_2 --> SZ6_DONE[/Subzaak Afsluiting afgerond/]
         end
 
-        SZ6_AFGEROND --> SZ_BETALING
-
-        subgraph SZ7["Subzaak: Betaling"]
-            SZ_BETALING[Betaling initiëren] --> TAAK_BETALING
-            subgraph SSZ7["Subsubzaak: Taken Betaling"]
-                TAAK_BETALING[Betaalopdracht aanmaken] --> TAAK_BETALING_CONTROLE[Betaling controleren]
-            end
-            TAAK_BETALING_CONTROLE --> SZ7_AFGEROND[/Subzaak Betaling\nafgerond/]
-        end
-
-        SZ7_AFGEROND --> HZ_AFGEROND[/Hoofdzaak afgerond/]
+        SZ6_DONE --> HZ_DONE[/Hoofdzaak afgerond/]
     end
 
-    HZ_AFGEROND --> EINDE([Zaak gesloten])
+    HZ_DONE --> END([Zaak gesloten])
 ```
 
 ---
 
-## 2. Hoofdzaak · Subzaak · Subsubzaak – hiërarchie
-
-De UPNL-procesmanagementservice hanteert een drielaags hiërarchie. Dit diagram toont de structurele relaties en de bijbehorende terminologie.
+## 4. Hiërarchie: Hoofdzaak · Subzaak · SubZaakTaak
 
 ```mermaid
 graph TD
-    HZ["🗂️ Hoofdzaak\n(= Zaak)\nZaaknummer, Klantstatus,\nMedewerkerstatus"]
+    HZ["Hoofdzaak\nZaaknummer + status + context"]
 
-    HZ --> SZ_AAN["📁 Subzaak: Aanvraag\n(= Fase)"]
-    HZ --> SZ_BEH["📁 Subzaak: Behandeling\n(= Fase)"]
-    HZ --> SZ_BES["📁 Subzaak: Beschikking\n(= Fase)"]
-    HZ --> SZ_VAR["📁 Subzaak: Vaststelling\n(= Fase)"]
-    HZ --> SZ_BEZ["📁 Subzaak: Bezwaar\n(= Fase, optioneel)"]
-    HZ --> SZ_BER["📁 Subzaak: Beroep\n(= Fase, optioneel)"]
-    HZ --> SZ_BET["📁 Subzaak: Betaling\n(= Fase)"]
+    HZ --> SZ_A["Subzaak: Intake"]
+    HZ --> SZ_B["Subzaak: Validatie"]
+    HZ --> SZ_C["Subzaak: Aanvulling"]
+    HZ --> SZ_D["Subzaak: Uitvoering"]
+    HZ --> SZ_E["Subzaak: Controle"]
+    HZ --> SZ_F["Subzaak: Afsluiting"]
 
-    SZ_AAN --> SSZ_1["📄 Subsubzaak: Volledigheidstoets\n(= Taak)"]
-    SZ_AAN --> SSZ_2["📄 Subsubzaak: Ontvangstbevestiging\n(= Taak)"]
+    SZ_A --> SZT_A1["SubZaakTaak: Ontvangst registreren"]
+    SZ_A --> SZT_A2["SubZaakTaak: Invoer structureren"]
 
-    SZ_BEH --> SSZ_3["📄 Subsubzaak: Inhoudelijke beoordeling\n(= Taak)"]
-    SZ_BEH --> SSZ_4["📄 Subsubzaak: Kwaliteitscontrole\n(= Taak)"]
+    SZ_B --> SZT_B1["SubZaakTaak: Gegevenscontrole"]
+    SZ_B --> SZT_B2["SubZaakTaak: Regelcontrole"]
 
-    SZ_BES --> SSZ_5["📄 Subsubzaak: Beschikking opstellen\n(= Taak)"]
-    SZ_BES --> SSZ_6["📄 Subsubzaak: Beschikking verzenden\n(= Taak)"]
+    SZ_D --> SZT_D1["SubZaakTaak: Beslismoment uitvoeren"]
+    SZ_D --> SZT_D2["SubZaakTaak: Resultaat voorbereiden"]
 
-    SZ_VAR --> SSZ_7["📄 Subsubzaak: Vaststelling beoordelen\n(= Taak)"]
-    SZ_VAR --> SSZ_8["📄 Subsubzaak: Vaststellingsbeschikking\n(= Taak)"]
-
-    SZ_BEZ --> SSZ_9["📄 Subsubzaak: Bezwaar beoordelen\n(= Taak)"]
-    SZ_BEZ --> SSZ_10["📄 Subsubzaak: Hoorzitting\n(= Taak)"]
-
-    SZ_BET --> SSZ_11["📄 Subsubzaak: Betaalopdracht\n(= Taak)"]
-    SZ_BET --> SSZ_12["📄 Subsubzaak: Betaling controleren\n(= Taak)"]
-
-    style HZ fill:#4A90D9,color:#fff,stroke:#2C5F8A
-    style SZ_AAN fill:#7B68EE,color:#fff,stroke:#4B3A9E
-    style SZ_BEH fill:#7B68EE,color:#fff,stroke:#4B3A9E
-    style SZ_BES fill:#7B68EE,color:#fff,stroke:#4B3A9E
-    style SZ_VAR fill:#7B68EE,color:#fff,stroke:#4B3A9E
-    style SZ_BEZ fill:#9B8EAE,color:#fff,stroke:#6B5E7E
-    style SZ_BER fill:#9B8EAE,color:#fff,stroke:#6B5E7E
-    style SZ_BET fill:#7B68EE,color:#fff,stroke:#4B3A9E
-    style SSZ_1 fill:#90EE90,color:#333,stroke:#3A8A3A
-    style SSZ_2 fill:#90EE90,color:#333,stroke:#3A8A3A
-    style SSZ_3 fill:#90EE90,color:#333,stroke:#3A8A3A
-    style SSZ_4 fill:#90EE90,color:#333,stroke:#3A8A3A
-    style SSZ_5 fill:#90EE90,color:#333,stroke:#3A8A3A
-    style SSZ_6 fill:#90EE90,color:#333,stroke:#3A8A3A
-    style SSZ_7 fill:#90EE90,color:#333,stroke:#3A8A3A
-    style SSZ_8 fill:#90EE90,color:#333,stroke:#3A8A3A
-    style SSZ_9 fill:#90EE90,color:#333,stroke:#3A8A3A
-    style SSZ_10 fill:#90EE90,color:#333,stroke:#3A8A3A
-    style SSZ_11 fill:#90EE90,color:#333,stroke:#3A8A3A
-    style SSZ_12 fill:#90EE90,color:#333,stroke:#3A8A3A
+    SZ_F --> SZT_F1["SubZaakTaak: Uitkomst publiceren"]
+    SZ_F --> SZT_F2["SubZaakTaak: Historie finaliseren"]
 ```
 
 ### Legenda
 
-| Niveau | UPNL-term | Procesterm | Omschrijving |
-|--------|-----------|------------|--------------|
-| 1 | **Hoofdzaak** | Zaak | Centrale registratie; bevat klantstatus en medewerkerstatus |
-| 2 | **Subzaak** | Fase | Een procesonderdeel (bijv. Aanvraag, Behandeling, Bezwaar) |
-| 3 | **Subsubzaak** | Taak | Een individuele werktaak binnen een fase |
+| Niveau | Term | Omschrijving |
+|--------|------|--------------|
+| 1 | **Hoofdzaak** | Centrale casus met unieke identificatie en gecombineerde status |
+| 2 | **Subzaak** | Afgebakende fase met eigen lifecycle |
+| 3 | **SubZaakTaak** | Kleinste uitvoerbare taak binnen een Subzaak |
 
 ---
 
-## 3. Zaakstatus – toestandsdiagram
+## 5. Statusmodel
 
-De zaakstatus wordt centraal afgeleid door de Procesmanagement-service op basis van de actieve Subzaken. Er is een **klantstatus** (extern, vereenvoudigd) en een **medewerkerstatus** (intern, gedetailleerd).
+Het statusmodel ondersteunt een externe, vereenvoudigde status en een interne, gedetailleerde status. Parallelle Subzaken zijn toegestaan; de Hoofdzaakstatus is een afgeleide aggregatie.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Ontvangen : Aanvraag ingediend
+    [*] --> Nieuw : Hoofdzaak aangemaakt
+    Nieuw --> InIntake : Intake gestart
+    InIntake --> InValidatie : Intake afgerond
 
-    Ontvangen --> InBehandeling : Volledigheidstoets geslaagd
-    Ontvangen --> AanvullingVereist : Aanvraag onvolledig
+    InValidatie --> WachtOpAanvulling : Aanvulling nodig
+    WachtOpAanvulling --> InValidatie : Aanvulling verwerkt
 
-    AanvullingVereist --> InBehandeling : Aanvulling ontvangen
-    AanvullingVereist --> Ingetrokken : Aanvraag ingetrokken
+    InValidatie --> InUitvoering : Validatie akkoord
+    InUitvoering --> InControle : Uitvoering afgerond
+    InControle --> InAfsluiting : Controle akkoord
+    InAfsluiting --> Afgesloten : Afsluiting afgerond
 
-    InBehandeling --> KwaliteitsControle : Inhoudelijke beoordeling afgerond
-    KwaliteitsControle --> BeschikkingVoorbereid : Kwaliteitscontrole geslaagd
-    KwaliteitsControle --> InBehandeling : Kwaliteitscontrole afgekeurd
+    InIntake --> Gepauzeerd : Tijdelijke blokkade
+    InValidatie --> Gepauzeerd : Tijdelijke blokkade
+    InUitvoering --> Gepauzeerd : Tijdelijke blokkade
+    Gepauzeerd --> InIntake : Hervatten
+    Gepauzeerd --> InValidatie : Hervatten
+    Gepauzeerd --> InUitvoering : Hervatten
 
-    BeschikkingVoorbereid --> Toegekend : Beschikking positief verzonden
-    BeschikkingVoorbereid --> Afgewezen : Beschikking negatief verzonden
+    Nieuw --> Geannuleerd : Geannuleerd
+    InIntake --> Geannuleerd : Geannuleerd
+    InValidatie --> Geannuleerd : Geannuleerd
+    InUitvoering --> Geannuleerd : Geannuleerd
+    InControle --> Geannuleerd : Geannuleerd
+    InAfsluiting --> Geannuleerd : Geannuleerd
 
-    Toegekend --> VaststellingOpen : Vaststellingsperiode gestart
-    VaststellingOpen --> VaststellingOntvangen : Vaststellingsverzoek ingediend
-    VaststellingOntvangen --> VaststellingBeoordeeld : Vaststelling beoordeeld
-    VaststellingBeoordeeld --> Vastgesteld : Vaststellingsbeschikking positief
-    VaststellingBeoordeeld --> PartieelVastgesteld : Deelbetaling vastgesteld
-
-    Vastgesteld --> Betaald : Betaling uitgevoerd
-    PartieelVastgesteld --> Betaald : Betaling uitgevoerd
-    Betaald --> [*]
-
-    Toegekend --> BezwaarIngediend : Bezwaarschrift ontvangen
-    Afgewezen --> BezwaarIngediend : Bezwaarschrift ontvangen
-    BezwaarIngediend --> BezwaarInBehandeling : Bezwaar in behandeling
-    BezwaarInBehandeling --> BezwaarGegrond : Bezwaar gegrond verklaard
-    BezwaarInBehandeling --> BezwaarOngegrond : Bezwaar ongegrond verklaard
-
-    BezwaarGegrond --> BeschikkingVoorbereid : Heroverweging
-    BezwaarOngegrond --> BeroepIngediend : Beroepschrift ontvangen
-
-    BeroepIngediend --> BeroepInBehandeling : Beroep in behandeling
-    BeroepInBehandeling --> BeroepGegrond : Rechter: beroep gegrond
-    BeroepInBehandeling --> BeroepOngegrond : Rechter: beroep ongegrond
-
-    BeroepGegrond --> BeschikkingVoorbereid : Heroverweging na rechter
-    BeroepOngegrond --> [*]
-
-    Ingetrokken --> [*]
-
-    note right of Ontvangen
-        Klantstatus: Aanvraag ontvangen
-        Medewerkerstatus: Volledigheidstoets
-    end note
-
-    note right of Toegekend
-        Klantstatus: Subsidie toegekend
-        Medewerkerstatus: Wacht op vaststelling
-    end note
+    Afgesloten --> [*]
+    Geannuleerd --> [*]
 ```
 
 ---
 
-## 4. Fasebeheer – sequentiediagram
-
-Dit diagram toont hoe de **Procesmanagement-service** centraal de fases (Subzaken) coördineert. Fases melden zich aan bij de service, die bepaalt of ze gestart mogen worden en registreert de proceshistorie.
+## 6. Fase-orkestratie (sequentie)
 
 ```mermaid
 sequenceDiagram
-    actor Klant
-    participant ZO as Zaakoverzicht
+    actor Gebruiker
+    participant UI as Zaakportaal
     participant PMS as Procesmanagement-service
-    participant ORM as ORM Database
-    participant FASE as Fase (DCM Blueriq)
-    participant DMS as Documentmanagementsysteem
-    participant UDV as UDV / Externe applicaties
+    participant STORE as Zaakregister
+    participant ENGINE as Procesengine
+    participant DOC as Documentopslag
+    participant EXT as Externe koppelingen
 
-    Note over Klant, UDV: Aanvraag – Hoofdzaak aanmaken
+    Gebruiker->>UI: Verzoek indienen
+    UI->>PMS: Hoofdzaak starten
+    PMS->>STORE: Hoofdzaak opslaan
+    STORE-->>PMS: Bevestiging
+    PMS-->>UI: Zaakreferentie
 
-    Klant->>ZO: Aanvraag indienen
-    ZO->>PMS: Hoofdzaak registreren
-    PMS->>ORM: Hoofdzaak opslaan (zaaknummer, status)
-    ORM-->>PMS: Bevestiging
-    PMS-->>ZO: Zaaknummer teruggeven
-    ZO-->>Klant: Ontvangstbevestiging
+    ENGINE->>PMS: Subzaak startverzoek
+    PMS->>STORE: Context en historie ophalen
+    STORE-->>PMS: Gegevensset
+    PMS->>PMS: Startvoorwaarden evalueren
 
-    Note over Klant, UDV: Subzaak starten – Fase meldt zich aan
-
-    FASE->>PMS: Fase gestart (subzaak aanmelden)
-    PMS->>ORM: Procesgegevens ophalen (1 ORM call)
-    ORM-->>PMS: Zaakhistorie, besluiten, HoofdzaakParameters
-    PMS->>PMS: Afleiden of fase actief mag zijn\n(Blueriq logica)
-    alt Fase mag starten
-        PMS->>ORM: Subzaak registreren (gestart)
-        PMS-->>FASE: Akkoord – fase mag starten
-        FASE->>FASE: DCM-proces uitvoeren (taken/subsubzaken)
-        FASE->>DMS: Schermafdruk opslaan bij Subsubzaak
-        DMS-->>FASE: Document-referentie
-        FASE->>ORM: Subsubzaak registreren (taak gestart/afgerond)
-    else Fase mag niet starten
-        PMS-->>FASE: Afgewezen – fase niet toegestaan
-        PMS->>ORM: Foutregistratie opslaan
+    alt Start toegestaan
+        PMS->>STORE: Subzaak registreren (gestart)
+        PMS-->>ENGINE: Start akkoord
+        ENGINE->>STORE: SubZaakTaak updates registreren
+        ENGINE->>DOC: Documentreferenties opslaan
+        DOC-->>ENGINE: Referentie bevestigd
+    else Start niet toegestaan
+        PMS-->>ENGINE: Start geweigerd
+        PMS->>STORE: Incident registreren
     end
 
-    Note over Klant, UDV: Subzaak afronden – Fase meldt afsluiting
+    ENGINE->>PMS: Subzaak afgerond
+    PMS->>STORE: Subzaakstatus bijwerken
+    PMS->>PMS: Hoofdzaakstatus opnieuw afleiden
+    PMS->>STORE: Geaggregeerde status opslaan
+    PMS->>ENGINE: Volgende Subzaak(en) activeren
+    PMS->>EXT: Statuspublicatie
 
-    FASE->>PMS: Fase afgerond/afgebroken (subzaak afsluiten)
-    PMS->>ORM: Subzaak status bijwerken (afgerond/afgebroken)
-    PMS->>ORM: Profile export opslaan bij Subzaak
-    PMS->>PMS: Zaakstatus afleiden (klant + medewerker)
-    PMS->>ORM: Zaakstatus opslaan in Hoofdzaak
-    PMS->>PMS: Bepalen welke volgende fases gestart moeten worden
-    PMS->>FASE: Volgende fase(s) starten (automatisch)
-    PMS->>UDV: Statusupdate pushen
-
-    Note over Klant, UDV: Externe raadpleging via Zaakoverzicht
-
-    ZO->>PMS: External flow: zaakhistorie opvragen
-    PMS->>ORM: Subzaak en Subsubzaak historie ophalen
-    ORM-->>PMS: Historie data
-    PMS-->>ZO: Subzaak/Subsubzaak overzicht tonen
-    ZO-->>Klant: Actuele status en taken tonen
+    UI->>PMS: Zaakstatus opvragen
+    PMS->>STORE: Historie ophalen
+    STORE-->>PMS: Historie
+    PMS-->>UI: Status + historie
 ```
 
 ---
 
-## 5. Architectuur – componentdiagram
-
-Het architectuuroverzicht toont de relaties tussen de UPNL-componenten, de Procesmanagement-service en externe systemen.
+## 7. Architectuur (componenten)
 
 ```mermaid
 graph TB
-    subgraph KLANT["Klantomgeving"]
-        K_PORTAL["Klantportaal\n(Zaakoverzicht)"]
-        K_TAKENLIJST["Takenlijst\n(DCM + fase-initiërend)"]
+    subgraph KANAAL["Kanalen"]
+        PORTAAL["Zaakportaal"]
+        WERKLIJST["Werklijst"]
+        BEHEER["Beheerconsole"]
     end
 
-    subgraph MEDEWERKER["Medewerkeromgeving"]
-        MW_ZAAKOVERZICHT["Zaakoverzicht\nMedewerker"]
-        MW_WERKLIJST["Werklijsten\n(SOR-viewer)"]
-        MW_BEHEER["Beheerderspagina\n(Fase-herstel)"]
+    subgraph PLATFORM["Nieuw Platform"]
+        subgraph PMS["Procesmanagement-service"]
+            ORK["Orkestratie"]
+            STA["Statusafleiding"]
+            PLN["Planning"]
+            HIS["Historiebeheer"]
+        end
+
+        ENGINE["Procesengine"]
+        STORE["Zaakregister"]
+        DOC["Documentopslag"]
+        EVT["Eventbus"]
     end
 
-    subgraph UPNL["UPNL Platform"]
-        subgraph PMS_COMP["Procesmanagement-service"]
-            PMS_FASEBEHEER["Fasebeheer\n(starten/stoppen/analyseren)"]
-            PMS_STATUSAFLEIDING["Statusafleiding\n(klant + medewerker)"]
-            PMS_TAKENLIJST["Takenlijstbepaling\n(fase-initiërende taken)"]
-            PMS_PLANNER["Planner\n(semi-automatisch)"]
-        end
-
-        subgraph DCM["DCM / Blueriq"]
-            FASE_AAN["Fase: Aanvraag"]
-            FASE_BEH["Fase: Behandeling"]
-            FASE_BES["Fase: Beschikking"]
-            FASE_VAR["Fase: Vaststelling"]
-            FASE_BEZ["Fase: Bezwaar"]
-            FASE_BET["Fase: Betaling"]
-        end
-
-        subgraph BESCHIKKING["MC Beschikking\n(UPNL component)"]
-            BESLUITEN["Besluiten\nregistratie"]
-        end
-
-        subgraph ORM["ORM Database"]
-            TBL_HOOFDZAAK["Tabel: Hoofdzaak\n(+ HoofdzaakParameters)"]
-            TBL_SUBZAAK["Tabel: Subzaak\n(= Fase)"]
-            TBL_SUBSUBZAAK["Tabel: Subsubzaak\n(= Taak)"]
-            TBL_WERKLIJST_VIEWS["Database Views\n(Werklijsten)"]
-        end
-
-        subgraph DMS_COMP["Documentmanagementsysteem"]
-            DMS_DOCS["Documenten\n(Schermafdrukken,\nProfile exports)"]
-        end
+    subgraph KOPPELINGEN["Koppelingen"]
+        API["Externe API's"]
+        MSG["Berichtuitwisseling"]
     end
 
-    subgraph EXTERN["Externe systemen"]
-        UDV["UDV\n(Uitvoeringsdata-\nvoorziening)"]
-        BAS["BAS\n(Legacy systeem)"]
-        EXTERN_SYS["Overige externe\napplicaties"]
-    end
+    PORTAAL <--> ORK
+    WERKLIJST <--> STA
+    BEHEER <--> ORK
 
-    %% Klant verbindingen
-    K_PORTAL <--> PMS_TAKENLIJST
-    K_PORTAL <--> PMS_STATUSAFLEIDING
-    K_TAKENLIJST <--> PMS_TAKENLIJST
+    ORK <--> STA
+    ORK <--> PLN
+    ORK <--> HIS
 
-    %% Medewerker verbindingen
-    MW_ZAAKOVERZICHT <--> PMS_FASEBEHEER
-    MW_WERKLIJST <--> TBL_WERKLIJST_VIEWS
-    MW_BEHEER <--> PMS_FASEBEHEER
+    ORK <--> STORE
+    STA --> STORE
+    HIS --> STORE
 
-    %% PMS interne verbindingen
-    PMS_FASEBEHEER <--> PMS_STATUSAFLEIDING
-    PMS_FASEBEHEER <--> PMS_TAKENLIJST
-    PMS_PLANNER --> PMS_FASEBEHEER
+    ENGINE <--> ORK
+    ENGINE --> DOC
+    ENGINE --> EVT
 
-    %% PMS naar ORM
-    PMS_FASEBEHEER <--> TBL_HOOFDZAAK
-    PMS_FASEBEHEER <--> TBL_SUBZAAK
-    PMS_FASEBEHEER <--> TBL_SUBSUBZAAK
-    PMS_STATUSAFLEIDING --> TBL_HOOFDZAAK
-    BESLUITEN --> TBL_SUBZAAK
-
-    %% DCM Fases naar PMS
-    FASE_AAN <--> PMS_FASEBEHEER
-    FASE_BEH <--> PMS_FASEBEHEER
-    FASE_BES <--> PMS_FASEBEHEER
-    FASE_VAR <--> PMS_FASEBEHEER
-    FASE_BEZ <--> PMS_FASEBEHEER
-    FASE_BET <--> PMS_FASEBEHEER
-
-    %% Documenten
-    FASE_AAN --> DMS_DOCS
-    FASE_BEH --> DMS_DOCS
-    FASE_BES --> DMS_DOCS
-    DMS_DOCS --> TBL_SUBSUBZAAK
-
-    %% Extern
-    PMS_FASEBEHEER --> UDV
-    BAS -.->|Data migratie| TBL_SUBZAAK
-    PMS_FASEBEHEER <--> EXTERN_SYS
-
-    style PMS_COMP fill:#E8F4FD,stroke:#4A90D9
-    style DCM fill:#FFF3CD,stroke:#F0A500
-    style ORM fill:#D4EDDA,stroke:#28A745
-    style EXTERN fill:#F8D7DA,stroke:#DC3545
-    style KLANT fill:#E2D9F3,stroke:#6F42C1
-    style MEDEWERKER fill:#D1ECF1,stroke:#17A2B8
+    ORK --> API
+    EVT --> MSG
 ```
 
 ---
 
-## 6. Databasismodel – entiteiten
+## 8. Generiek datamodel
 
-Dit ER-diagram toont de kernentiteiten van het RVO-zaakmanagement datamodel, inclusief de relaties tussen Hoofdzaak, Subzaak en Subsubzaak.
+Dit model bevat alleen generieke kernentiteiten die in vrijwel elk zaakproces toepasbaar zijn.
 
 ```mermaid
 erDiagram
-    REGELING {
-        int ID PK
-        string NAAM
-        string TOELICHTING
-        string VERKORT
-        int DOMEIN_REFERENTIE_ID
-    }
-
     HOOFDZAAK {
-        int ID PK
-        int MODEL_ID FK
-        int STATUS_KLANT_ID
-        int STATUS_MEDEWERKER_ID
-        int RELATIE_ID
+        string ID PK
         string NUMMER
-        datetime CREATIE_DATUM_TIJD
-        datetime WIJZIGING_DATUM_TIJD
-        string CREATIE_GEBRUIKER
-        string WIJZIGING_GEBRUIKER
+        string STATUS_EXTERN
+        string STATUS_INTERN
+        string TYPE
+        datetime AANGEMAAKT_OP
+        datetime GEWIJZIGD_OP
+        string AANGEMAAKT_DOOR
+        string GEWIJZIGD_DOOR
     }
 
     HOOFDZAAK_PARAMETER {
-        int ID PK
-        int HOOFDZAAK_ID FK
-        string PARAMETER_NAAM
-        string PARAMETER_WAARDE
-        datetime CREATIE_DATUM_TIJD
+        string ID PK
+        string HOOFDZAAK_ID FK
+        string NAAM
+        string WAARDE
+        datetime AANGEMAAKT_OP
     }
 
     SUBZAAK {
-        int ID PK
-        int HOOFDZAAK_ID FK
-        int PROCES_FASE_ID FK
-        int STATUS_ID
-        int STATUS_KLANT_ID
-        int STATUS_MEDEWERKER_ID
-        string EXTERN_SYSTEEM_REFERENTIE
-        string ACTIE_PARAMETER
-        datetime STARTDATUM
-        datetime EINDDATUM
-        datetime CREATIE_DATUM_TIJD
-        datetime WIJZIGING_DATUM_TIJD
-        string CREATIE_GEBRUIKER
-        string WIJZIGING_GEBRUIKER
+        string ID PK
+        string HOOFDZAAK_ID FK
+        string CODE
+        string STATUS
+        int VOLGORDE
+        datetime START_OP
+        datetime EIND_OP
+        datetime AANGEMAAKT_OP
+        datetime GEWIJZIGD_OP
     }
 
-    SUBSUBZAAK {
-        int ID PK
-        int SUBZAAK_ID FK
-        int MODEL_ACTIE_ID FK
-        int RESULTAAT_ID
-        int STATUS_ID
-        string DOCUMENT_REFERENTIE
-        datetime STARTDATUM
-        datetime EINDDATUM
-        datetime CREATIE_DATUM_TIJD
-        datetime WIJZIGING_DATUM_TIJD
-        string CREATIE_GEBRUIKER
-        string WIJZIGING_GEBRUIKER
+    SUBZAAKTAAK {
+        string ID PK
+        string SUBZAAK_ID FK
+        string CODE
+        string STATUS
+        string RESULTAAT
+        string DOCUMENT_REF
+        datetime START_OP
+        datetime EIND_OP
+        datetime AANGEMAAKT_OP
+        datetime GEWIJZIGD_OP
     }
 
-    PROCES_FASE {
-        int ID PK
-        string OMSCHRIJVING_EXTERN
-        int TYPE_ID
-        string TOELICHTING
-    }
-
-    MODEL {
-        int ID PK
-        string NAAM
-        string TOELICHTING
-        string VERKORT
-    }
-
-    MODEL_ACTIE {
-        int ID PK
-        int MODEL_ID FK
-        string NAAM
-        string TOELICHTING
-        string VERKORT
-        int TYPE_ID
-        int OBJECT_AFHANDELING_ID
-        int PROCES_FASE_ID FK
-        int STATUS_ID
-        boolean IS_START_ACTIE
-        boolean IS_RAADPLEEG_ACTIE
-    }
-
-    DIENST {
-        int ID PK
-        int MODEL_ID FK
-        int OPENSTELLING_ID FK
-        string TOELICHTING
-        string NAAM
-        string VERKORT
-        int CONTROLE_FREQUENTIE
-        int TYPE_ID
-        int STATUS_ID
-    }
-
-    DIENSTVERZOEK {
-        int ID PK
-        int DIENST_ID FK
-        int HOOFDZAAK_ID FK
-        int STATUS_ID
-        datetime ONTVANGSTDATUM
-        int RANGNUMMER
-    }
-
-    ZAAK_BETROKKENE {
-        int ID PK
-        int HOOFDZAAK_ID FK
-        int ROL_REFERENTIE_ID
-        int RELATIE_ID
-        string NAAM
-        date DATUM_VAN
-        date DATUM_TOT
+    STATUS_OVERGANG {
+        string ID PK
+        string ENTITEIT_TYPE
+        string ENTITEIT_ID
+        string VAN_STATUS
+        string NAAR_STATUS
+        datetime OVERGANG_OP
+        string BRON
     }
 
     DOCUMENT {
-        int ID PK
+        string ID PK
         string REFERENTIE
-        int STATUS_ID
-        int SUBSUBZAAK_ID FK
-        string BESTANDSNAAM
-        string NAAM
-        date DATUM_DAGTEKENING
-        date DATUM_ONTVANGST
-        datetime CREATIE_DATUM_TIJD
-    }
-
-    TERMIJN {
-        int ID PK
-        int SUBZAAK_ID FK
-        int TERMIJNFUNCTIE_ID FK
-        date STARTDATUM
-        boolean ACTIEF
-        int EXTRA_TIJD
-    }
-
-    TERMIJNFUNCTIE {
-        int ID PK
-        string VERKORT
-        string OMSCHRIJVING
+        string SUBZAAKTAAK_ID FK
         string TYPE
-        string ABS_REL
-        string NIVEAU
+        datetime AANGEMAAKT_OP
     }
 
-    VERVOLG {
-        int ID PK
-        int ACTIE_VAN_ID FK
-        int ACTIE_NAAR_ID FK
-        int RESULTAAT_ID
-        int STATUS_ID
-        int MODEL_ACTIE_ID_TERMIJN FK
-    }
-
-    ZAAKVERWANTSCHAP {
-        int ID PK
-        int HOOFDZAAK_ID FK
-        int HOOFDZAAK_ID_VERWANT FK
-        int SOORT_VERWANTSCHAP_ID FK
-        int STATUS_ID
-        string TOELICHTING
-    }
-
-    ZAAKVERWANTSCHAP_SOORT {
-        int ID PK
-        string CODE
-        string OMSCHRIJVING
-    }
-
-    %% Relaties
-    REGELING ||--o{ MODEL : "heeft"
-    MODEL ||--o{ HOOFDZAAK : "definieert"
-    MODEL ||--o{ MODEL_ACTIE : "bevat"
-    MODEL ||--o{ DIENST : "heeft"
-
-    HOOFDZAAK ||--o{ SUBZAAK : "bestaat uit"
-    HOOFDZAAK ||--o{ HOOFDZAAK_PARAMETER : "heeft"
-    HOOFDZAAK ||--o{ DIENSTVERZOEK : "heeft"
-    HOOFDZAAK ||--o{ ZAAK_BETROKKENE : "heeft"
-    HOOFDZAAK ||--o{ ZAAKVERWANTSCHAP : "heeft"
-
-    SUBZAAK ||--o{ SUBSUBZAAK : "bestaat uit"
-    SUBZAAK ||--o{ TERMIJN : "heeft"
-    SUBZAAK }o--|| PROCES_FASE : "is van type"
-
-    SUBSUBZAAK ||--o{ DOCUMENT : "heeft"
-    SUBSUBZAAK }o--|| MODEL_ACTIE : "voert uit"
-
-    DIENST ||--o{ DIENSTVERZOEK : "ontvangt"
-    TERMIJN }o--|| TERMIJNFUNCTIE : "gebruikt"
-    MODEL_ACTIE ||--o{ VERVOLG : "leidt naar"
-    ZAAKVERWANTSCHAP }o--|| ZAAKVERWANTSCHAP_SOORT : "is van type"
+    HOOFDZAAK ||--o{ SUBZAAK : bevat
+    HOOFDZAAK ||--o{ HOOFDZAAK_PARAMETER : heeft
+    SUBZAAK ||--o{ SUBZAAKTAAK : bevat
+    SUBZAAKTAAK ||--o{ DOCUMENT : verwijst
+    HOOFDZAAK ||--o{ STATUS_OVERGANG : logt
+    SUBZAAK ||--o{ STATUS_OVERGANG : logt
+    SUBZAAKTAAK ||--o{ STATUS_OVERGANG : logt
 ```
+
+### Datamodel-richtlijnen
+
+- Alle entiteiten hebben technische ID, tijdstempels en herkomstvelden.
+- Statussen worden centraal beheerd en historisch gelogd.
+- Extensies worden toegevoegd via parameters of aanvullende tabellen, niet door kernentiteiten te vervuilen.
 
 ---
 
-## Naamgevingsconventies
+## 9. Governance en ontwerpafspraken
+
+### 9.1 Procesgovernance
+- Elke Subzaak heeft een duidelijke entry- en exit-conditie.
+- Elke SubZaakTaak levert een expliciet resultaat op.
+- Herstart en compensatie verlopen via gecontroleerde statusovergangen.
+
+### 9.2 Technische governance
+- API-contracten versioneren per major/minor.
+- Event schema’s worden centraal gevalideerd.
+- Idempotency keys zijn verplicht op muterende opdrachten.
+
+### 9.3 Operationele governance
+- Monitoring op doorlooptijd, foutpercentages en wachtrijen.
+- Incidentregistratie op taak-, fase- en hoofdzakniveau.
+- Beheerconsole ondersteunt pauzeren, hervatten en handmatige correctie.
+
+### 9.4 Security en privacy
+- Least privilege voor service-accounts.
+- Gegevensminimalisatie in externe publicaties.
+- Volledige audittrail voor alle statusmutaties.
+
+---
+
+## 10. Uitbreidbaarheid voor nieuwe regelingen
+
+Nieuwe regelingen worden toegevoegd met een vaste implementatiestrategie:
+
+1. Definieer een nieuw **zaaktype** met configuratie.
+2. Selecteer en orden standaard **Subzaken**.
+3. Koppel per Subzaak de benodigde **SubZaakTaken**.
+4. Configureer statusmapping extern/intern.
+5. Koppel optionele externe integraties via gestandaardiseerde connectoren.
+
+**Resultaat:**
+- Hoge herbruikbaarheid van platformcomponenten.
+- Beperkt maatwerk en voorspelbare implementatietijd.
+- Eenduidige operatie over verschillende regelingen heen.
+
+---
+
+## 11. Lead-architect validatie
+
+Deze validatie beoordeelt of het model geschikt is als blauwdruk voor een nieuwe regeling op een nieuw platform.
+
+### 11.1 Validatiecriteria
+
+- **Generiek:** geen regeling- of juridische afhankelijkheden.
+- **Schaalbaar:** meerdere zaaktypen en parallelle subzaken ondersteund.
+- **Bestuurbaar:** beheer, monitoring en herstelpaden expliciet.
+- **Controleerbaar:** auditbare statusovergangen en historie.
+- **Implementeerbaar:** duidelijke componentgrenzen en datacontracten.
+
+### 11.2 Beoordeling
+
+| Criterium | Resultaat | Toelichting |
+|----------|-----------|-------------|
+| Generiek | ✅ | Regeling-specifieke en juridische termen verwijderd |
+| Schaalbaar | ✅ | Parallelle subzaken en configureerbare stappen ondersteund |
+| Bestuurbaar | ✅ | Pauzeren/hervatten, incidentregistratie en beheerconsole opgenomen |
+| Controleerbaar | ✅ | Statusovergangen en historie als kernmodel gedefinieerd |
+| Implementeerbaar | ✅ | Duidelijke scheiding tussen portaal, orkestratie, engine en storage |
+
+### 11.3 Iteratiecheck
+
+De validatie toont geen blokkerende hiaten voor generieke inzet. Een extra iteratie is niet noodzakelijk voor de basisarchitectuur.
+
+**Conclusie:** model is optimaal als generieke startarchitectuur voor nieuwe regelingen op een nieuw RVO-platform.
+
+---
+
+## 12. Naamgevingsconventies
 
 | Begrip | Definitie |
 |--------|-----------|
-| **Hoofdzaak** | De centrale zaakregistratie bij RVO. Bevat zaaknummer, klantstatus en medewerkerstatus. |
-| **Subzaak** | Een fase binnen de hoofdzaak (bijv. Aanvraag, Behandeling, Beschikking, Vaststelling, Bezwaar, Beroep, Betaling). |
-| **Subsubzaak** | Een individuele taak binnen een subzaak (bijv. Volledigheidstoets, Kwaliteitscontrole). |
-| **Procesmanagement-service** | De centrale service die alle fases coördineert, statusafleiding doet en proceshistorie opslaat. |
-| **DCM** | Dynamisch Case Management – de Blueriq-component die de taken binnen een fase bestuurt. |
-| **ORM** | Operationeel relatiebeheersysteem – de centrale database van RVO. |
-| **MUP** | Modelleerconcept Uitvoeringsprogramma – beheert configuratiegegevens. |
-| **RUP** | Regelingenuitvoeringsprogramma – beheert regelingspecifieke configuratie. |
-| **GUP** | Gebruikersuitvoeringsprogramma – beheert autorisatie-informatie. |
-| **UDV** | Uitvoeringsdata-voorziening – extern systeem voor statusdeling. |
-| **SOR-viewer** | Systeem waarmee werklijsten worden getoond via databaseviews. |
-| **Klantstatus** | Vereenvoudigde status zichtbaar voor de aanvrager. |
-| **Medewerkerstatus** | Gedetailleerde interne status zichtbaar voor RVO-medewerkers. |
-| **HoofdzaakParameters** | Zaak-specifieke triggers/parameters voor conditionele procesvoortgang. |
-| **Profile export** | Momentopname van het Blueriq-profiel bij afsluiting van een fase. |
+| **Hoofdzaak** | Centrale casus met unieke identificatie en geaggregeerde status |
+| **Subzaak** | Fase binnen de Hoofdzaak met eigen lifecycle |
+| **SubZaakTaak** | Kleinste uitvoerbare taak binnen een Subzaak |
+| **Procesmanagement-service** | Component voor orkestratie, statusafleiding en historie |
+| **Procesengine** | Component die SubZaakTaken uitvoert conform configuratie |
+| **Zaakregister** | Persistente opslag voor Hoofdzaak, Subzaak, SubZaakTaak en historie |
+| **Documentopslag** | Opslag van documentreferenties gekoppeld aan SubZaakTaken |
+| **Externe status** | Vereenvoudigde status voor externe consumptie |
+| **Interne status** | Gedetailleerde status voor operationele sturing |
